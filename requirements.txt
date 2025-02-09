@@ -5,3 +5,4 @@ matplotlib
 PyPDF2
 fuzzywuzzy
 sentence-transformers
+openpyxl
