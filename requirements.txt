@@ -6,3 +6,4 @@ PyPDF2
 fuzzywuzzy
 sentence-transformers
 openpyxl
+python-Levenshtein
