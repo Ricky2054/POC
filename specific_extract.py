@@ -59,6 +59,20 @@ def calculate_sustainability_score(match_percentage):
     """
     return match_percentage
 
+def determine_data_availability(match_percentage):
+    """
+    Determines data availability based on match percentage ranges:
+    0-30%: High data gap (Not Available)
+    30-50%: Partially Available
+    50-100%: Fully Available
+    """
+    if match_percentage < 30:
+        return "Not Available (High Data Gap)"
+    elif match_percentage < 50:
+        return "Partially Available"
+    else:
+        return "Fully Available"
+
 def match_definitions_with_keywords(df, keywords, definition_column="Definition", threshold=70):
     """
     Compare each definition with keywords using fuzzy matching.
@@ -71,12 +85,14 @@ def match_definitions_with_keywords(df, keywords, definition_column="Definition"
             similarity = fuzz.token_set_ratio(definition, keyword)
             if similarity >= threshold:
                 sustainability_score = calculate_sustainability_score(similarity)
+                data_availability = determine_data_availability(similarity)
                 matched_results.append({
                     "RowIndex": index,
                     "Definition": definition,
                     "Keyword": keyword,
                     "MatchPercentage": similarity,
-                    "SustainabilityScore": sustainability_score
+                    "SustainabilityScore": sustainability_score,
+                    "DataAvailability": data_availability
                 })
                 # Uncomment next line to keep only first match per definition:
                 # break
@@ -95,13 +111,15 @@ def match_excel_to_excel(df1, df2, col1="Definition", col2="Definition", thresho
             similarity = fuzz.token_set_ratio(definition1, definition2)
             if similarity >= threshold:
                 sustainability_score = calculate_sustainability_score(similarity)
+                data_availability = determine_data_availability(similarity)
                 matched_results.append({
                     "Excel1_Row": idx1,
                     "Excel1_Definition": definition1,
                     "Excel2_Row": idx2,
                     "Excel2_Definition": definition2,
                     "MatchPercentage": similarity,
-                    "SustainabilityScore": sustainability_score
+                    "SustainabilityScore": sustainability_score,
+                    "DataAvailability": data_availability
                 })
     return matched_results
 
@@ -132,6 +150,14 @@ def main():
     with tab1:
         st.header("PDF to Excel Matching")
         st.write("Upload your PDF file and Excel file (with a 'Definition' column) to perform semantic matching analysis.")
+
+        # Add data availability explanation
+        st.info("""
+        **Data Availability Categories (Based on Semantic Match):**
+        - **0-30%**: Not Available (High Data Gap)
+        - **30-50%**: Partially Available
+        - **50-100%**: Fully Available
+        """)
 
         st.sidebar.header("PDF to Excel Configuration")
         pdf_fuzzy_threshold = st.sidebar.number_input("PDF-Excel Fuzzy Matching Threshold (%)", 
@@ -176,29 +202,44 @@ def main():
                     for match in results:
                         sem_score = compute_semantic_similarity(match["Definition"], match["Keyword"])
                         match["SemanticMatch"] = sem_score
+                        # Data availability is now based solely on semantic match
+                        match["DataAvailability"] = determine_data_availability(sem_score)
                 else:
+                    st.warning("Semantic similarity computation is required for data availability categorization. Enabling it automatically.")
+                    pdf_semantic_enabled = True
                     for match in results:
-                        match["SemanticMatch"] = None
+                        sem_score = compute_semantic_similarity(match["Definition"], match["Keyword"])
+                        match["SemanticMatch"] = sem_score
+                        match["DataAvailability"] = determine_data_availability(sem_score)
 
                 # Convert results to DataFrame and show the results table
                 results_df = pd.DataFrame(results)
                 st.write("### Matching Results")
                 st.dataframe(results_df)
 
-                # Plot histogram of semantic similarity (if computed)
-                if pdf_semantic_enabled:
-                    fig, ax = plt.subplots()
-                    ax.hist(results_df["SemanticMatch"], bins=10, color='skyblue', edgecolor='black')
-                    ax.set_xlabel("Semantic Similarity (%)")
-                    ax.set_ylabel("Frequency")
-                    ax.set_title("Distribution of Semantic Similarity Scores")
-                    st.pyplot(fig)
+                # Display data availability summary
+                if len(results_df) > 0:
+                    st.write("### Data Availability Summary (Based on Semantic Match)")
+                    availability_counts = results_df["DataAvailability"].value_counts()
+                    st.write(availability_counts)
+                    
+                    # Create a pie chart for data availability
+                    fig_pie, ax_pie = plt.subplots()
+                    ax_pie.pie(availability_counts, labels=availability_counts.index, autopct='%1.1f%%', startangle=90)
+                    ax_pie.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+                    st.pyplot(fig_pie)
 
-                    # Compute overall PDF Score: average semantic similarity
-                    pdf_score = results_df["SemanticMatch"].mean()
-                    st.write(f"**PDF Score (Average Semantic Similarity): {pdf_score:.2f}%**")
-                else:
-                    st.write("Semantic similarity not computed.")
+                # Plot histogram of semantic similarity (if computed)
+                fig, ax = plt.subplots()
+                ax.hist(results_df["SemanticMatch"], bins=10, color='skyblue', edgecolor='black')
+                ax.set_xlabel("Semantic Similarity (%)")
+                ax.set_ylabel("Frequency")
+                ax.set_title("Distribution of Semantic Similarity Scores")
+                st.pyplot(fig)
+
+                # Compute overall PDF Score: average semantic similarity
+                pdf_score = results_df["SemanticMatch"].mean()
+                st.write(f"**PDF Score (Average Semantic Similarity): {pdf_score:.2f}%**")
 
                 # Plot fuzzy match percentages
                 fig2, ax2 = plt.subplots()
@@ -215,6 +256,14 @@ def main():
     with tab2:
         st.header("Excel to Excel Matching")
         st.write("Upload two Excel files to compare definitions between them.")
+        
+        # Add data availability explanation
+        st.info("""
+        **Data Availability Categories (Based on Semantic Match):**
+        - **0-30%**: Not Available (High Data Gap)
+        - **30-50%**: Partially Available
+        - **50-100%**: Fully Available
+        """)
         
         st.sidebar.header("Excel to Excel Configuration")
         excel_fuzzy_threshold = st.sidebar.number_input("Excel-Excel Fuzzy Matching Threshold (%)", 
@@ -264,27 +313,44 @@ def main():
                     for match in results:
                         sem_score = compute_excel_semantic_similarity(match["Excel1_Definition"], match["Excel2_Definition"])
                         match["SemanticMatch"] = sem_score
+                        # Data availability is now based solely on semantic match
+                        match["DataAvailability"] = determine_data_availability(sem_score)
                 else:
+                    st.warning("Semantic similarity computation is required for data availability categorization. Enabling it automatically.")
+                    excel_semantic_enabled = True
                     for match in results:
-                        match["SemanticMatch"] = None
+                        sem_score = compute_excel_semantic_similarity(match["Excel1_Definition"], match["Excel2_Definition"])
+                        match["SemanticMatch"] = sem_score
+                        match["DataAvailability"] = determine_data_availability(sem_score)
                 
                 # Convert results to DataFrame and show the results table
                 results_df = pd.DataFrame(results)
                 st.write("### Matching Results")
                 st.dataframe(results_df)
                 
-                # Plot histogram of semantic similarity (if computed)
-                if excel_semantic_enabled:
-                    fig, ax = plt.subplots()
-                    ax.hist(results_df["SemanticMatch"], bins=10, color='skyblue', edgecolor='black')
-                    ax.set_xlabel("Semantic Similarity (%)")
-                    ax.set_ylabel("Frequency")
-                    ax.set_title("Distribution of Semantic Similarity Scores")
-                    st.pyplot(fig)
+                # Display data availability summary
+                if len(results_df) > 0:
+                    st.write("### Data Availability Summary (Based on Semantic Match)")
+                    availability_counts = results_df["DataAvailability"].value_counts()
+                    st.write(availability_counts)
                     
-                    # Compute overall Excel Score: average semantic similarity
-                    excel_score = results_df["SemanticMatch"].mean()
-                    st.write(f"**Excel Comparison Score (Average Semantic Similarity): {excel_score:.2f}%**")
+                    # Create a pie chart for data availability
+                    fig_pie, ax_pie = plt.subplots()
+                    ax_pie.pie(availability_counts, labels=availability_counts.index, autopct='%1.1f%%', startangle=90)
+                    ax_pie.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+                    st.pyplot(fig_pie)
+                
+                # Plot histogram of semantic similarity
+                fig, ax = plt.subplots()
+                ax.hist(results_df["SemanticMatch"], bins=10, color='skyblue', edgecolor='black')
+                ax.set_xlabel("Semantic Similarity (%)")
+                ax.set_ylabel("Frequency")
+                ax.set_title("Distribution of Semantic Similarity Scores")
+                st.pyplot(fig)
+                
+                # Compute overall Excel Score: average semantic similarity
+                excel_score = results_df["SemanticMatch"].mean()
+                st.write(f"**Excel Comparison Score (Average Semantic Similarity): {excel_score:.2f}%**")
                 
                 # Plot fuzzy match percentages
                 fig2, ax2 = plt.subplots()
